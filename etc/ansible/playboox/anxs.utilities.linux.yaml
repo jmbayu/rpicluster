@@ -1,0 +1,5 @@
+---
+# useful linux utiliites
+- hosts: all
+  roles:
+    - anxs.utilities

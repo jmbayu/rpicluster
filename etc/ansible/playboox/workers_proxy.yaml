@@ -1,0 +1,5 @@
+---
+# proxy only for the worker nodes .... erstmal
+- hosts: workers
+  roles:
+    - ruzickap.proxy_settings

@@ -1,0 +1,11 @@
+---
+# vim for "all"
+- hosts: all
+  become: yes
+  become_user: root
+  tasks:
+    - name: Ensure vim is presently installed
+      apt:
+        name: vim
+        state: present
+        update_cache: true

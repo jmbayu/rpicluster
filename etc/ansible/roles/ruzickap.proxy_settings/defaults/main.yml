@@ -1,0 +1,10 @@
+---
+# defaults file for proxy_settings
+
+proxy_settings_http_proxy: 'http://10.240.0.1:3128'
+proxy_settings_ftp_proxy: 'http://10.240.0.1:3128'
+proxy_settings_https_proxy: 'http://10.240.0.1:3128'
+proxy_settings_no_proxy: 'example.com,10.240.0.1'
+proxy_settings_yum_proxy: 'http://10.240.0.1:3128'
+proxy_settings_yum_proxy_username: 'nouser'
+proxy_settings_yum_proxy_password: 'nopassword'
