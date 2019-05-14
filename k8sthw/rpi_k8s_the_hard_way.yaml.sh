@@ -1,30 +1,28 @@
-I have been playing around with Kubernetes for a couple months now. 
-I have setup MiniKube and OpenShift on a Single Fedora Node that runs on a Mac Mini. 
-I’ve taken the Certified Kubernetes Administrator course on Linux Academy, which sets up a small cluster, 
-and I have just finished The Linux Academy course Kubernetes the Hard Way, 
-which follows Kelsey Hightower’s paper Kubernetes The Hard Way. 
-This course was fantastic, and I highly recommend it if you really want to learn about how Kubernetes is put together. 
+I have been playing around with Kubernetes for a couple months now.
+I have setup MiniKube and OpenShift on a Single Fedora Node that runs on a Mac Mini.
+I’ve taken the Certified Kubernetes Administrator course on Linux Academy, which sets up a small cluster, and I have just finished The Linux Academy course Kubernetes the Hard Way, which follows Kelsey Hightower’s paper Kubernetes The Hard Way.
+This course was fantastic, and I highly recommend it if you really want to learn about how Kubernetes is put together.
 Up until taking this course, every tutorial or class I had taken used kubeadm, ansible scripts,
-or some other script that was a wrapper around one of those. 
+or some other script that was a wrapper around one of those.
 Kubernetes the hard way really showed me what all these scripts were doing, and the building blocks of how kubernetes is put together.
 
-So I have decided it will be a good project to put together a Raspberry Pi cluster following Kubernetes The Hardway setup. 
+So I have decided it will be a good project to put together a Raspberry Pi cluster following Kubernetes The Hardway setup.
 I will publish a series of posts documenting this installation.
 
 The Setup:
 ## I have 7 Raspberry Pi 3 B+, a 8-port NetGear Gigabit switch, a GeauxRobot 7 layer Dogbone Pi rack, and 7 Samsung 32GB mini SD Cards.
-I have 3 Raspberry Pi (two Pi 3B+ and one Pi2), a 5-port switch with USB-Power source, 
+I have 3 Raspberry Pi (two Pi 3B+ and one Pi2), a 5-port switch with USB-Power source,
 a Pi rack, and 2 64GB and 1 32GB USB-Flash drive and 1 micro SD Cards for booting the Pi 2.
 
-The plan is to build 2 Master Controllers, 3 Worker Nodes, 
-and so two nodes shall be hermaphrodite while on only does heavy lifting 
+The plan is to build 2 Master Controllers, 3 Worker Nodes,
+and so two nodes shall be hermaphrodite while on only does heavy lifting
 
 One master will also be the load balancer.
-Each Master will run etcd, kube-apiserver, kube-scheduler, and kube-controller-manager. 
-Each worker will run a kubelet, kube-proxy, kube-dns, and use docker as the container platform.  
+Each Master will run etcd, kube-apiserver, kube-scheduler, and kube-controller-manager.
+Each worker will run a kubelet, kube-proxy, kube-dns, and use docker as the container platform.
 
-This is a bit of a change from Kubernetes the hard way, since that used containerd as the container platform. 
-However, that is one of the things I learned that interested me the most. In Kubernetes, 
+This is a bit of a change from Kubernetes the hard way, since that used containerd as the container platform.
+However, that is one of the things I learned that interested me the most. In Kubernetes,
 it is possible to switch out some of these building blocks, and I’m interested in figuring out how that is done.
 
 
@@ -41,12 +39,12 @@ Unmount the SD Card, put it in the Pi and boot.
 There are a number of ways to figure out the IP of your Pi, i.e. login to your router/DHCP server, and a number of scanning tools. I prefer to use nmap.
 $ nmap -p 22 192.168.1.0/24
 
-Nmap scan report for raspberrypi.local (192.168.1.26)
+Nmap scan report for raspberrypi.local (10.1.1.42)
 Host is up (0.0037s latency).
 SSH into your Pi with the user pi
 If you setup your sshkey properly, you will not be prompted for a password.
 
-Run sudo raspi-config In Network Options, change the hostname to “k8s-master-1.k8s.daveevans.us”, and in Advanced Options expand the root filesystem. Then Reboot. When it comes back up you should now be able to ssh pi@k8s-master-1.k8s.daveevans.us
+Run sudo raspi-config In Network Options, change the hostname to “pinode2”, and in Advanced Options expand the root filesystem. Then Reboot. When it comes back up you should now be able to ssh pi@pinode2
 
 Setup a second virtual interface to create a private network between the Raspberry Pi’s. These will be the addresses used in all the configurations of the cluster.
 
@@ -59,10 +57,11 @@ iface eth0 inet dhcp
 auto eth0:1
 allow-hotplug eth0:1
 iface eth0:1 inet static
-  address 10.0.0.10
+  address 10.240.0.1
   netmask 255.255.255.0
   gateway 10.0.0.1
-Turn off swap
+
+# Turn off swap
 
 $ sudo dphys-swapfile swapoff && \
 $ sudo dphys-swapfile uninstall && \
@@ -74,34 +73,37 @@ $ sudo vi /boot/cmdline.txt
 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory
 Repeat these steps on the other 6 pi’s using the following host names:
 
-k8s-master-2.k8s.daveevans.us
+pinode1
 k8s-master-3.k8s.daveevans.us
-k8s-node-1.k8s.daveevans.us
-k8s-node-2.k8s.daveevans.us
+pinode3
+pinode1
 k8s-node-3.k8s.daveevans.us
-kubernetes.k8s.daveevans.us
+pinode2
 After completing all the installations and configurations, my servers have the below names and IP addresses.
 
 Hostname	Public IP	Private IP
-k8s-master-1.k8s.daveevans.us	192.168.1.20	10.0.0.10
-k8s-master-2.k8s.daveevans.us	192.168.1.21	10.0.0.11
+pinode2	10.1.1.42	10.240.0.1
+pinode1	10.1.1.41	10.240.0.2
 k8s-master-3.k8s.daveevans.us	192.168.1.22	10.0.0.12
-k8s-node-1.k8s.daveevans.us	192.168.1.23	10.0.0.13
-k8s-node-2.k8s.daveevans.us	192.168.1.24	10.0.0.14
+pinode3	192.168.1.23	10.240.0.3
+pinode1	10.1.1.41	10.240.0.2
 k8s-node-3.k8s.daveevans.us	192.168.1.25	10.0.0.15
-kubernetes.k8s.daveevans.us	192.168.1.26	10.0.0.16
+pinode2	10.1.1.42	10.240.0.1
 ---
-After the setup of the raspberry pi servers in part 1, I have the hostnames and IPs in the table below. We now have to create a CA and certificates for all the different pieces of the cluster. Then create kubeconfigs for the different components to use to connect to the cluster, and distribute everything out to the nodes. This seems like a really long post, but you will see that its a lot of rinse and repeat commands. All the commands below are run on my local machice.
+After the setup of the raspberry pi servers in part 1, I have the hostnames and IPs in the table below. We now have to create a CA and certificates for all the different pieces of the cluster. Then create kubeconfigs for the different components to use to connect to the cluster, and distribute everything out to the nodes. This seems like a really long post, but you will see that its a lot of rinse and repeat commands. 
+
+All the commands below are run on my local linux machine.
 
 Hostname	Public IP	Private IP
-k8s-master-1.k8s.daveevans.us	192.168.1.20	10.0.0.10
-k8s-master-2.k8s.daveevans.us	192.168.1.21	10.0.0.11
+pinode2	10.1.1.42	10.240.0.1
+pinode1	10.1.1.41	10.240.0.2
 k8s-master-3.k8s.daveevans.us	192.168.1.22	10.0.0.12
-k8s-node-1.k8s.daveevans.us	192.168.1.23	10.0.0.13
-k8s-node-2.k8s.daveevans.us	192.168.1.24	10.0.0.14
+pinode3	192.168.1.23	10.240.0.3
+pinode1	10.1.1.41	10.240.0.2
 k8s-node-3.k8s.daveevans.us	192.168.1.25	10.0.0.15
-kubernetes.k8s.daveevans.us	192.168.1.26	10.0.0.16
-Setup our local machine
+pinode2	10.1.1.42	10.240.0.1
+
+Setup our local linux machine (alfa 10.1.1.10)
 
 First, we need to install cfssl which will be used to create all the certificates that we will create.
 
@@ -149,11 +151,11 @@ cat > ca-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "Kubernetes",
       "OU": "CA",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -175,11 +177,11 @@ cat > admin-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:masters",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -195,7 +197,7 @@ cfssl gencert \
 }
 Create API Server Certs. Below we first set a CERT_HOSTNAME environment variable that lists all the IPs and hostnames that could be used to connect to the API servers.
 
-$ CERT_HOSTNAME=10.32.0.1,10.0.0.10,k8s-master-1.k8s.daveevans.us,10.0.0.11,k8s-master-2.k8s.daveevans.us,10.0.0.12,k8s-master-3.k8s.daveevans.us,127.0.0.1,localhost,kubernetes.default
+$ CERT_HOSTNAME=10.32.0.1,10.240.0.1,pinode2,10.240.0.2,pinode1,10.0.0.12,k8s-master-3.k8s.daveevans.us,127.0.0.1,localhost,kubernetes.default
 
 
 $ {
@@ -209,11 +211,11 @@ cat > kubernetes-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "Kubernetes",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -241,11 +243,11 @@ cat > kube-controller-manager-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:kube-controller-manager",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -272,11 +274,11 @@ cat > kube-scheduler-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:kube-scheduler",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -292,10 +294,10 @@ cfssl gencert \
 }
 Create Client Certificates. We create environment variables that list the hostname and IPs of the worker nodes, then create the certificates for each node. One important note, we are using the private IP address that was setup on the second virtual address for all the IP connectivity.
 
-$ WORKER0_HOST=k8s-node-1.k8s.daveevans.us
-$ WORKER0_IP=10.0.0.13
-$ WORKER1_HOST=k8s-node-2.k8s.daveevans.us
-$ WORKER1_IP=10.0.0.14
+$ WORKER0_HOST=pinode3
+$ WORKER0_IP=10.240.0.3
+$ WORKER1_HOST=pinode1
+$ WORKER1_IP=10.240.0.2
 $ WORKER2_HOST=k8s-node-3.k8s.daveevans.us
 $ WORKER2_IP=10.0.0.15
 
@@ -309,11 +311,11 @@ cat > ${WORKER0_HOST}-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:nodes",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -336,11 +338,11 @@ cat > ${WORKER1_HOST}-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:nodes",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -363,11 +365,11 @@ cat > ${WORKER2_HOST}-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:nodes",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -394,11 +396,11 @@ cat > kube-proxy-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "system:node-proxier",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -425,11 +427,11 @@ cat > service-account-csr.json << EOF
   },
   "names": [
     {
-      "C": "US",
-      "L": "Pittsburgh",
+      "C": "DE",
+      "L": "Baden-Wuerteberg",
       "O": "Kubernetes",
       "OU": "Kubernetes The Hard Way",
-      "ST": "Pennsylvania"
+      "ST": "Boeblingen"
     }
   ]
 }
@@ -550,7 +552,7 @@ Create kube-proxy kubeconfig
 }
 Create the worker node kubeconfigs. Here a for loop is used to create the individual kubeconfigs for each of the nodes.
 
-for instance in k8s-node-1.k8s.daveevans.us k8s-node-2.k8s.daveevans.us k8s-node-3.k8s.daveevans.us; do
+for instance in pinode3 pinode1 k8s-node-3.k8s.daveevans.us; do
   kubectl config set-cluster kubernetes-the-hard-way \
     --certificate-authority=ca.pem \
     --embed-certs=true \
@@ -583,7 +585,7 @@ $ scp ca.pem \
       kube-scheduler.kubeconfig \
       admin-key.pem admin.pem \
       admin.kubeconfig \
-      pi@k8s-master-1.k8s.daveevans.us:~/
+      pi@pinode2:~/
 
 $ scp ca.pem \
       ca-key.pem \
@@ -596,7 +598,7 @@ $ scp ca.pem \
       kube-scheduler.kubeconfig \
       admin-key.pem admin.pem \
       admin.kubeconfig \
-      pi@k8s-master-2.k8s.daveevans.us:~/
+      pi@pinode1:~/
 
 $ scp ca.pem \
       ca-key.pem \
@@ -615,19 +617,19 @@ $ scp kube-proxy-key.pem \
       kube-proxy.pem \
       kube-proxy.kubeconfig \
       ca.pem \
-      k8s-node-1.k8s.daveevans.us-key.pem \
-      k8s-node-1.k8s.daveevans.us.pem \
-      k8s-node-1.k8s.daveevans.us.kubeconfig \
-      pi@k8s-node-1.k8s.daveevans.us:~/
+      pinode3-key.pem \
+      pinode3.pem \
+      pinode3.kubeconfig \
+      pi@pinode3:~/
       
 $ scp kube-proxy-key.pem \
       kube-proxy.pem \
       kube-proxy.kubeconfig \
       ca.pem \
-      k8s-node-2.k8s.daveevans.us-key.pem \
-      k8s-node-2.k8s.daveevans.us.pem \
-      k8s-node-2.k8s.daveevans.us.kubeconfig \
-      pi@k8s-node-2.k8s.daveevans.us:~/
+      pinode1-key.pem \
+      pinode1.pem \
+      pinode1.kubeconfig \
+      pi@pinode1:~/
 
 $ scp kube-proxy-key.pem \
       kube-proxy.pem \
@@ -642,13 +644,13 @@ $ scp kube-proxy-key.pem \
 In this part of the series, we will setup the 3 master nodes. Starting by installing the Ectd, then the kube-apiserver, kube-controller-manager, and kube-scheduler. In a bit of a departure from the original Kubernetes the Hard Way, I will not setup the the local nginx proxy on each master node to proxy the healthz endpoint. This was done because of a limitation of the load balancers on Google Cloud, but is not needed with using nginx as the load balancer.
 
 Hostname	Public IP	Private IP
-k8s-master-1.k8s.daveevans.us	192.168.1.20	10.0.0.10
-k8s-master-2.k8s.daveevans.us	192.168.1.21	10.0.0.11
+pinode2	10.1.1.42	10.240.0.1
+pinode1	10.1.1.41	10.240.0.2
 k8s-master-3.k8s.daveevans.us	192.168.1.22	10.0.0.12
-k8s-node-1.k8s.daveevans.us	192.168.1.23	10.0.0.13
-k8s-node-2.k8s.daveevans.us	192.168.1.24	10.0.0.14
+pinode3	192.168.1.23	10.240.0.3
+pinode1	10.1.1.41	10.240.0.2
 k8s-node-3.k8s.daveevans.us	192.168.1.25	10.0.0.15
-kubernetes.k8s.daveevans.us	192.168.1.26	10.0.0.16
+pinode2	10.1.1.42	10.240.0.1
 Install Etcd
 
 This presented my first challenge of this project. Etcd does have builds for arm64; however, the Raspberry Pi 3 B+ running raspbian run the armv7l kernel. You can see this be running arch on your raspberry pi. Luckily, Etcd is written in go, which makes it pretty easy to cross compile code.
@@ -657,19 +659,19 @@ Setup each master node for creating Etcd config.
 
 On k8s-master-1:
 
-$ ETCD_NAME=k8s-master-1.k8s.daveevans.us
-$ INTERNAL_IP=10.0.0.10
-$ INITIAL_CLUSTER=k8s-master-1.k8s.daveevans.us=https://10.0.0.10:2380,k8s-master-2.k8s.daveevans.us=https://10.0.0.11:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
+$ ETCD_NAME=pinode2
+$ INTERNAL_IP=10.240.0.1
+$ INITIAL_CLUSTER=pinode2=https://10.240.0.1:2380,pinode1=https://10.240.0.2:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
 On k8s-master-2:
 
-ETCD_NAME=k8s-master-2.k8s.daveevans.us
-INTERNAL_IP=10.0.0.11
-INITIAL_CLUSTER=k8s-master-1.k8s.daveevans.us=https://10.0.0.10:2380,k8s-master-2.k8s.daveevans.us=https://10.0.0.11:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
+ETCD_NAME=pinode1
+INTERNAL_IP=10.240.0.2
+INITIAL_CLUSTER=pinode2=https://10.240.0.1:2380,pinode1=https://10.240.0.2:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
 On k8s-master-3:
 
 ETCD_NAME=k8s-master-3.k8s.daveevans.us
 INTERNAL_IP=10.0.0.12
-INITIAL_CLUSTER=k8s-master-1.k8s.daveevans.us=https://10.0.0.10:2380,k8s-master-2.k8s.daveevans.us=https://10.0.0.11:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
+INITIAL_CLUSTER=pinode2=https://10.240.0.1:2380,pinode1=https://10.240.0.2:2380,k8s-master-3.k8s.daveevans.us=https://10.0.0.12:2380
 Cross compile Etcd binaries on local machine, and distribute to the master nodes.
 
 On my local machine:
@@ -677,9 +679,9 @@ On my local machine:
 $ go get github.com/etcd-io/etcd
 $ env GOOS=linux GOARCH=arm go build -o ~/build-etcd/etcd github.com/etcd-io/etcd
 $ env GOOS=linux GOARCH=arm go build -o ~/build-etcd/etcdctl github.com/etcd-io/etcd/etcdctl
-$ scp ~/build-etcd/etcd* pi@k8s-master-1.k8s.daveevans.us:~/
-$ scp ~/build-etcd/etcd* pi@k8s-master-2.k8s.daveevans.us:~/
-$ scp ~/build-etcd/etcd* pi@k8s-master-2.k8s.daveevans.us:~/
+$ scp ~/build-etcd/etcd* pi@pinode2:~/
+$ scp ~/build-etcd/etcd* pi@pinode1:~/
+$ scp ~/build-etcd/etcd* pi@pinode1:~/
 Move the binaries into place and create the necessary configuration directories.
 
 On All 3 Masters:
@@ -751,9 +753,9 @@ $ sudo cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
   encryption-config.yaml /var/lib/kubernetes/
 
 
-$ INTERNAL_IP=10.0.0.10
-$ CONTROLLER0_IP=10.0.0.10
-$ CONTROLLER1_IP=10.0.0.11
+$ INTERNAL_IP=10.240.0.1
+$ CONTROLLER0_IP=10.240.0.1
+$ CONTROLLER1_IP=10.240.0.2
 $ CONTROLLER2_IP=10.0.0.12
 
 
@@ -917,8 +919,8 @@ Edit /etc/nginx/nginx.conf adding the below line at the bottom.
    include /etc/nginx/tcpconf.d/*;
 Create an nginx config file
 
-$ CONTROLLER0_IP=10.0.0.10
-$ CONTROLLER1_IP=10.0.0.11
+$ CONTROLLER0_IP=10.240.0.1
+$ CONTROLLER1_IP=10.240.0.2
 $ CONTROLLER2_IP=10.0.0.12
 
 $ cat << EOF | sudo tee /etc/nginx/tcpconf.d/kubernetes.conf
@@ -1095,8 +1097,8 @@ Check to see if nodes registered. On one of the master nodes run:
 
 $ kubectl get nodes
 NAME                          STATUS     ROLES    AGE   VERSION
-k8s-node-1.k8s.daveevans.us   NotReady   <none>   12m   v1.12.0
-k8s-node-2.k8s.daveevans.us   NotReady   <none>   32s   v1.12.0
+pinode3   NotReady   <none>   12m   v1.12.0
+pinode1   NotReady   <none>   32s   v1.12.0
 k8s-node-3.k8s.daveevans.us   NotReady   <none>   12m   v1.12.0
 ---
 Kubernetes on Raspberry Pi, The Hard Way - Part 5
